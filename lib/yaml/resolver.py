@@ -1,5 +1,5 @@
 
-__all__ = ['BaseResolver', 'Resolver']
+__all__ = ['BaseResolver', 'Resolver', 'NoSexagesimalResolver']
 
 from .error import *
 from .nodes import *
@@ -33,6 +33,34 @@ class BaseResolver:
             first = [None]
         for ch in first:
             cls.yaml_implicit_resolvers.setdefault(ch, []).append((tag, regexp))
+
+    @classmethod
+    def replace_implicit_resolver(cls, tag, regexp):
+        """
+        Replace the regular expression of an already registered implicit
+        resolver for `tag`, keeping the resolver's original position in the
+        resolver lists.  Raise `ResolverError` if no resolver for `tag` has
+        been registered yet.
+
+        Unlike `add_implicit_resolver`, this does not append a second entry
+        for the same tag, so the order in which tags are checked is
+        preserved.
+        """
+        if not 'yaml_implicit_resolvers' in cls.__dict__:
+            implicit_resolvers = {}
+            for key in cls.yaml_implicit_resolvers:
+                implicit_resolvers[key] = cls.yaml_implicit_resolvers[key][:]
+            cls.yaml_implicit_resolvers = implicit_resolvers
+        found = False
+        for resolvers in cls.yaml_implicit_resolvers.values():
+            for index, (existing_tag, existing_regexp) in enumerate(resolvers):
+                if existing_tag == tag:
+                    resolvers[index] = (tag, regexp)
+                    found = True
+        if not found:
+            raise ResolverError(
+                    "cannot replace an implicit resolver for %r: "
+                    "no such resolver has been registered" % (tag,))
 
     @classmethod
     def add_path_resolver(cls, tag, path, kind=None):
@@ -224,4 +252,34 @@ Resolver.add_implicit_resolver(
         'tag:yaml.org,2002:yaml',
         re.compile(r'^(?:!|&|\*)$'),
         list('!&*'))
+
+
+# YAML 1.1 defines sexagesimal (base 60) numbers such as `1:30` or
+# `190:20:30.15`, which `Resolver` resolves to integers and floats.  The YAML
+# 1.2 Core Schema dropped that notation, so plain scalars containing a colon
+# fall back to the default string tag there.
+#
+# `NoSexagesimalResolver` keeps every default resolver intact and only replaces
+# the `int` and `float` regular expressions with equivalents without the
+# sexagesimal alternatives.  Scalars like `1:30` then match no implicit
+# resolver and are constructed as the verbatim strings `'1:30'`, while plain
+# decimal, hexadecimal, octal and binary numbers keep resolving exactly as
+# before.  The default `Resolver` is not modified, so the historical YAML 1.1
+# loading behavior remains the default and is opt-out only.
+class NoSexagesimalResolver(Resolver):
+    pass
+
+NoSexagesimalResolver.replace_implicit_resolver(
+        'tag:yaml.org,2002:float',
+        re.compile(r'''^(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+][0-9]+)?
+                    |\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?
+                    |[-+]?\.(?:inf|Inf|INF)
+                    |\.(?:nan|NaN|NAN))$''', re.X))
+
+NoSexagesimalResolver.replace_implicit_resolver(
+        'tag:yaml.org,2002:int',
+        re.compile(r'''^(?:[-+]?0b[0-1_]+
+                    |[-+]?0[0-7_]+
+                    |[-+]?(?:0|[1-9][0-9_]*)
+                    |[-+]?0x[0-9a-fA-F_]+)$''', re.X))
 

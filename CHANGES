@@ -5,7 +5,13 @@ For a complete changelog, see:
 
 7.0.0.dev0 (TBD)
 
-* TBD
+* Add opt-in ``NoSexagesimalResolver`` and ``SafeLoaderNoSexagesimal`` /
+  ``FullLoaderNoSexagesimal`` / ``UnsafeLoaderNoSexagesimal`` loaders, which
+  keep YAML 1.1 sexagesimal scalars such as ``1:30`` as verbatim strings
+  instead of resolving them to base-60 integers/floats (YAML 1.2 Core Schema
+  behavior).  The default ``Resolver`` and all default loaders are unchanged;
+  add ``BaseResolver.replace_implicit_resolver`` to support replacing an
+  existing implicit resolver regexp in place without changing resolver order.
 
 6.0.2 (2024-08-06)
 
